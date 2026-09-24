@@ -52,9 +52,15 @@ struct ETSI014Client
 end
 
 
+# HTTP.jl takes whole seconds as Int: passing client.timeout (Float64) raised a
+# TypeError, so get_status never worked against any KMS. get_enc_keys and
+# get_dec_keys passed no timeout at all and could block forever.
+_timeouts(client::ETSI014Client) = (connect_timeout = ceil(Int, client.timeout),
+                                    readtimeout = ceil(Int, client.timeout))
+
 function get_status(client::ETSI014Client)::ETSIStatus
     url = "$(client.base_url)/api/v1/keys/$(client.destination_sae_id)/status"
-    resp = HTTP.get(url; headers=["Accept" => "application/json"], connect_timeout=client.timeout)
+    resp = HTTP.get(url; headers=["Accept" => "application/json"], _timeouts(client)...)
     data = JSON3.read(resp.body)
 
     return ETSIStatus(
@@ -74,7 +80,7 @@ end
 function get_enc_keys(client::ETSI014Client; number::Int=1, size::Int=256)::Vector{ETSIKey}
     url = "$(client.base_url)/api/v1/keys/$(client.destination_sae_id)/enc_keys"
     payload = JSON3.write(Dict("number" => number, "size" => size))
-    resp = HTTP.post(url, ["Content-Type" => "application/json", "Accept" => "application/json"], payload)
+    resp = HTTP.post(url, ["Content-Type" => "application/json", "Accept" => "application/json"], payload; _timeouts(client)...)
     data = JSON3.read(resp.body)
 
     keys = ETSIKey[]
@@ -94,7 +100,7 @@ end
 function get_dec_keys(client::ETSI014Client, key_ids::Vector{String})::Vector{ETSIKey}
     url = "$(client.base_url)/api/v1/keys/$(client.destination_sae_id)/dec_keys"
     req_body = Dict("key_IDs" => [Dict("key_ID" => kid) for kid in key_ids])
-    resp = HTTP.post(url, ["Content-Type" => "application/json", "Accept" => "application/json"], JSON3.write(req_body))
+    resp = HTTP.post(url, ["Content-Type" => "application/json", "Accept" => "application/json"], JSON3.write(req_body); _timeouts(client)...)
     data = JSON3.read(resp.body)
 
     keys = ETSIKey[]
