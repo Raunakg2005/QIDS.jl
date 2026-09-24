@@ -1,5 +1,13 @@
 module ETSI
 
+# Plain imports, not the old try/import guard: that guard also imported
+# Base64, which Project.toml did not declare, so under package loading the
+# import failed, the guard went false, and every ETSI call errored with
+# "HTTP.jl and JSON3.jl are required" even with both installed.
+import HTTP
+import JSON3
+using Base64: base64decode
+
 export ETSIKey, ETSIStatus, ETSI014Client, get_status, get_enc_keys, get_dec_keys, to_bit_list
 
 struct ETSIKey
@@ -43,20 +51,8 @@ struct ETSI014Client
     end
 end
 
-const HAS_HTTP = try
-    import HTTP
-    import JSON3
-    import Base64: base64decode
-    true
-catch
-    false
-end
 
 function get_status(client::ETSI014Client)::ETSIStatus
-    if !HAS_HTTP
-        error("HTTP.jl and JSON3.jl are required for ETSI network operations. Install with: using Pkg; Pkg.add([\"HTTP\", \"JSON3\"])")
-    end
-    # Invoked when HTTP and JSON3 are present
     url = "$(client.base_url)/api/v1/keys/$(client.destination_sae_id)/status"
     resp = HTTP.get(url; headers=["Accept" => "application/json"], connect_timeout=client.timeout)
     data = JSON3.read(resp.body)
@@ -76,9 +72,6 @@ function get_status(client::ETSI014Client)::ETSIStatus
 end
 
 function get_enc_keys(client::ETSI014Client; number::Int=1, size::Int=256)::Vector{ETSIKey}
-    if !HAS_HTTP
-        error("HTTP.jl and JSON3.jl are required for ETSI network operations. Install with: using Pkg; Pkg.add([\"HTTP\", \"JSON3\"])")
-    end
     url = "$(client.base_url)/api/v1/keys/$(client.destination_sae_id)/enc_keys"
     payload = JSON3.write(Dict("number" => number, "size" => size))
     resp = HTTP.post(url, ["Content-Type" => "application/json", "Accept" => "application/json"], payload)
@@ -99,9 +92,6 @@ function get_enc_keys(client::ETSI014Client; number::Int=1, size::Int=256)::Vect
 end
 
 function get_dec_keys(client::ETSI014Client, key_ids::Vector{String})::Vector{ETSIKey}
-    if !HAS_HTTP
-        error("HTTP.jl and JSON3.jl are required for ETSI network operations. Install with: using Pkg; Pkg.add([\"HTTP\", \"JSON3\"])")
-    end
     url = "$(client.base_url)/api/v1/keys/$(client.destination_sae_id)/dec_keys"
     req_body = Dict("key_IDs" => [Dict("key_ID" => kid) for kid in key_ids])
     resp = HTTP.post(url, ["Content-Type" => "application/json", "Accept" => "application/json"], JSON3.write(req_body))
