@@ -1,11 +1,11 @@
-# QIDS.jl — Quantum Digital Signatures Julia SDK
+# QIDS.jl
 
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/Raunakg2005/QIDS.jl?label=version)](https://github.com/Raunakg2005/QIDS.jl/releases)
 
-**Official Julia SDK for Quantum Digital Signatures (QDS), ETSI GS QKD 014 Ingestion & Wald SPRT Threat Detection.**
+**Julia primitives for the QIDS quantum digital signature stack: an ETSI GS QKD 014 key-management client, Wald SPRT detection, and Toeplitz universal hashing.**
 
-`QIDS.jl` is designed for high-performance quantitative finance, high-frequency settlement, and post-quantum cryptographic analysis in Julia.
+`QIDS.jl` does not sign documents. Signing and verification happen on a QIDS gateway, whose one-time universal-hash key is what makes a tag unforgeable. For gateway clients, see the Python, TypeScript, Go and Java SDKs.
 
 ---
 
@@ -23,30 +23,30 @@ Pkg.add(url="https://github.com/Raunakg2005/QIDS.jl.git")
 ```julia
 using QIDS
 
-# 1. Initialize ETSI GS QKD 014 Key Management Entity Client
-kms = ETSIClient("https://qkd-kms.internal.net", "bank_node_alpha", "bank_node_beta")
+# 1. ETSI GS QKD 014 key-management client
+kms = ETSI014Client(ENV["QIDS_KMS_URL"], "bank_node_alpha", "bank_node_beta")
 
-# 2. Ingest carrier-grade quantum key stream
 status = get_status(kms)
-println("Available Key Slices: $(status.stored_key_count)")
+println("Available keys: $(status.stored_key_count)")
 
-keys = get_enc_keys(kms, 1, 256)
-println("Ingested Quantum Key ID: $(keys[1].key_id)")
+keys = get_enc_keys(kms; number=1, size=256)
+println("Key ID: $(keys[1].key_id) ($(keys[1].size_bits) bits)")
 
-# 3. Real-Time Sequential Threat Detection (Wald SPRT)
-sprt = SPRTDetector(0.01, 0.1111, 1e-4, 1e-4)
-update!(sprt, false) # channel observation match
-println("Link Security State: $(get_state(sprt))")
+# 2. Wald SPRT detector (false = observation matched, true = error)
+sprt = SequentialTest(0.01, 0.1111; alpha=1e-4, beta=1e-4)
+state = update!(sprt, false)
+println("Link state: $(state)")
 ```
+
+`QIDS_KMS_URL` is your key-management entity's base URL. To try it locally, the `qids` Python package ships a mock: `pip install qids && python -m qids.hardware.etsi_mock_server 8085`, then `QIDS_KMS_URL=http://127.0.0.1:8085`.
 
 ---
 
-## Capabilities
+## What's in the package
 
-- **Information-Theoretic Security**: Immunity against quantum computer attacks (Shor's algorithm).
-- **Sub-Millisecond Verification**: Zero allocations during hot-path polynomial hashing.
-- **ETSI GS QKD 014 Ingestion**: Native HTTP/JSON3 carrier KMS streaming.
-- **Auditable & Deterministic**: Zero black-box AI/ML models.
+- **ETSI GS QKD 014 client**: `ETSI014Client`, `get_status`, `get_enc_keys`, `get_dec_keys`.
+- **Wald SPRT**: `SequentialTest`, `update!`, `feed!`, `reset!`, closed-form with no ML.
+- **Toeplitz universal hashing**: `toeplitz_hash` over GF(2^n). This is a keyed hash, and it is only as secret as the polynomial and seed you pass it.
 
 ---
 

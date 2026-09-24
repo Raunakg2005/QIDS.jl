@@ -1,0 +1,49 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  julia:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ["1.10", "1"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.julia-version }}
+
+      - name: Unit tests
+        run: |
+          julia --project=. -e 'using Pkg; Pkg.instantiate()'
+          julia --project=. test/runtests.jl
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: README quickstart, installed as a package, against a mock ETSI KMS
+        run: |
+          pip install qids
+          python -m qids.hardware.etsi_mock_server 8085 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8085/api/v1/keys/x/status >/dev/null && break; sleep 1; done
+          python3 - > /tmp/quickstart.jl <<'PY'
+          import re
+          print(re.search(r"## Quickstart.*?```julia\n(.*?)```", open("README.md").read(), re.S).group(1))
+          PY
+          # A fresh environment that loads QIDS the way users do (as a package),
+          # not by include()-ing the source like test/runtests.jl does.
+          julia --project=/tmp/consumer -e 'using Pkg; Pkg.develop(path=ENV["GITHUB_WORKSPACE"])'
+          QIDS_KMS_URL=http://127.0.0.1:8085 julia --project=/tmp/consumer /tmp/quickstart.jl
+          # get_dec_keys is not in the quickstart: check Bob receives Alice's key.
+          QIDS_KMS_URL=http://127.0.0.1:8085 julia --project=/tmp/consumer -e '
+            using QIDS
+            k = get_enc_keys(ETSI014Client(ENV["QIDS_KMS_URL"], "SAE_Alice", "SAE_Bob"); number=1, size=256)[1]
+            d = get_dec_keys(ETSI014Client(ENV["QIDS_KMS_URL"], "SAE_Bob", "SAE_Alice"), [k.key_id])[1]
+            (d.key_id == k.key_id && d.key_bytes == k.key_bytes) || error("dec_keys returned a different key")
+            println("get_dec_keys round trip OK")'
