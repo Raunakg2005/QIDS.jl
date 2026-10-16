@@ -1,6 +1,7 @@
 using Test
-include("../src/QIDS.jl")
-using .QIDS
+# Load QIDS as the package it is, the way Pkg.test() and users do. Including
+# the source file instead hid package-loading bugs.
+using QIDS
 
 @testset "QIDS.jl Comprehensive Test Suite" begin
 

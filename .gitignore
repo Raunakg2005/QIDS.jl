@@ -1,0 +1,2 @@
+# A package does not pin its dependencies; Pkg resolves them for each user.
+Manifest.toml
